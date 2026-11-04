@@ -1,0 +1,5 @@
+out/
+fw/
+*.bin
+*.log
+__pycache__/
