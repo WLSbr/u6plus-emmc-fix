@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Gera o kernel (Image) e o DTB corrigidos para o UniFi U6+ (UAPL6 / MT7981).
+"""Build the patched kernel (Image) and DTB for the UniFi U6+ (UAPL6 / MT7981).
 
-Baixa o firmware oficial, extrai o FIT do kernel0, descomprime o kernel (lzma),
-extrai o DTB do U6+ e aplica a correcao da eMMC: clock 26 MHz + drive-strength 8 mA.
-Requer: python3, curl, dtc (brew install dtc / apt install device-tree-compiler).
-Uso: python3 make_payload.py [pasta_de_saida]   (padrao: ./out)
+Downloads the official firmware, extracts the kernel0 FIT image, decompresses the
+kernel (lzma), extracts the U6+ DTB and applies the eMMC fix: 26 MHz clock +
+8 mA drive-strength.
+Requires: python3, curl, dtc (brew install dtc / apt install device-tree-compiler).
+Usage: python3 make_payload.py [output_dir]   (default: ./out)
 """
 import lzma, os, re, struct, subprocess, sys, zlib
 
 FW_URL = ("https://fw-download.ubnt.com/data/unifi-firmware/"
           "2932-UAPL6-6.7.31-b621c5ba-52ef-4853-b113-e776f276871f.bin")
-KERNEL0_OFFSET = 923253          # offset do FIT (magic d00dfeed) dentro do .bin
+KERNEL0_OFFSET = 923253          # offset of the FIT (magic d00dfeed) inside the .bin
 OUT = sys.argv[1] if len(sys.argv) > 1 else "out"
-EXPECT = {"Image": "0b76818f", "vB.dtb": "4e7fbf99"}   # CRC32 validados em 2 aparelhos
+EXPECT = {"Image": "0b76818f", "vB.dtb": "4e7fbf99"}   # CRC32 validated on 2 devices
 PINS = '"PWM0", "SPI0_CLK", "SPI0_MOSI", "SPI0_MISO", "SPI0_CS", "SPI0_HOLD", "SPI0_WP", "SPI1_CLK", "SPI1_MOSI", "SPI1_MISO", "SPI1_CS"'
 
 os.makedirs(OUT, exist_ok=True)
@@ -21,10 +22,10 @@ if not os.path.exists(fw):
     subprocess.run(["curl", "-sL", "-o", fw, FW_URL], check=True)
 d = open(fw, "rb").read()
 o = KERNEL0_OFFSET
-assert d[o:o+4] == b"\xd0\x0d\xfe\xed", "firmware diferente do esperado"
+assert d[o:o+4] == b"\xd0\x0d\xfe\xed", "unexpected firmware file"
 fit = d[o:o+struct.unpack(">I", d[o+4:o+8])[0]]
 
-# percorre o FIT (FDT) e pega os blobs 'data' de kernel-1 e fdt-u6-plus
+# walk the FIT (FDT) and collect the 'data' blobs of kernel-1 and fdt-u6-plus
 _, _, off_s, off_str, _, _, _, _, sz_str, sz_s = struct.unpack(">10I", fit[:40])
 st = fit[off_str:off_str+sz_str]
 p, path, blobs = off_s, [], {}
@@ -59,7 +60,7 @@ for name, want in EXPECT.items():
     b = open(os.path.join(OUT, name), "rb").read()
     got = "%08x" % (zlib.crc32(b) & 0xffffffff)
     blocks = -(-len(b) // 512)
-    print("%-8s %9d bytes  %6d blocos (0x%x)  crc32 %s  %s" % (name, len(b), blocks, blocks, got,
-          "OK" if got == want else "DIFERENTE (esperado %s)" % want))
+    print("%-8s %9d bytes  %6d blocks (0x%x)  crc32 %s  %s" % (name, len(b), blocks, blocks, got,
+          "OK" if got == want else "MISMATCH (expected %s)" % want))
     ok &= got == want
 sys.exit(0 if ok else 1)

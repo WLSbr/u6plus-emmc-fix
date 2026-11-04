@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Utilitario de UART para o u-boot do U6+ (115200 8N1). So usa a biblioteca padrao.
+"""UART helper for the U6+ u-boot (115200 8N1). Standard library only.
 
-  uart.py break [segundos]              espera o 'Autobooting' e interrompe com Esc (padrao 150 s)
-  uart.py cmd 'comando' ['comando' ..]  manda comandos ao prompt MT7981# e mostra a saida
-  uart.py write RAM LBA BLOCOS          grava da RAM na eMMC em pedacos de 1024 blocos (mmc write)
-  uart.py log SEGUNDOS ARQUIVO          captura o console num arquivo
+  uart.py break [seconds]            wait for 'Autobooting' and interrupt with Esc (default 150 s)
+  uart.py cmd 'cmd' ['cmd' ..]       send commands to the MT7981# prompt and print the output
+  uart.py write RAM LBA BLOCKS       write RAM to eMMC in chunks of 1024 blocks (mmc write)
+  uart.py log SECONDS FILE           capture the console to a file
 
-Porta: variavel UART (padrao /dev/cu.wchusbserial10; no Linux, /dev/ttyUSB0).
-ARMADILHA: logo depois do 'break' o PRIMEIRO comando e engolido ("Unknown command").
-Por isso 'cmd' e 'write' mandam um 'version' descartavel antes. Nunca mande Enter
-vazio: o u-boot repete o ultimo comando (ex.: baixaria o tftpboot de novo).
+Port: env var UART (default /dev/cu.wchusbserial10; on Linux use /dev/ttyUSB0).
+PITFALL: right after 'break' the FIRST command is swallowed ("Unknown command").
+That is why 'cmd' and 'write' send a throwaway 'version' first. Never send an empty
+Enter: u-boot repeats the previous command (e.g. it would run tftpboot again).
 """
 import os, select, sys, termios, time
 
@@ -42,7 +42,7 @@ def do_break(secs):
             for _ in range(15): os.write(fd, b"\x1b"); time.sleep(0.03)
             buf += rd(2); break
     ok = b"MT7981#" in buf[-30:]
-    print("PROMPT" if ok else "SEM PROMPT"); return ok
+    print("PROMPT" if ok else "NO PROMPT"); return ok
 
 def do_cmd(cmds):
     cmd("version")
@@ -56,10 +56,10 @@ def do_write(ram, lba, total, ch=1024):
         n = min(ch, total - done)
         t = cmd("mmc write 0x%x 0x%x 0x%x" % (ram + done * 512, lba + done, n), 10, b"written")
         if "written: OK" not in t:
-            print("FALHA no bloco", done, t[-200:]); sys.exit(1)
+            print("FAILED at block", done, t[-200:]); sys.exit(1)
         rd(0.3); done += n
         if (done // ch) % 10 == 0: print("ok", done, "/", total, flush=True)
-    print("COMPLETO", total)
+    print("DONE", total)
 
 if __name__ == "__main__":
     m = sys.argv[1] if len(sys.argv) > 1 else ""
